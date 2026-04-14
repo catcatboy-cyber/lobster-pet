@@ -21,6 +21,8 @@ import com.lobster.pet.MainActivity
 import com.lobster.pet.MenuActivity
 import com.lobster.pet.R
 import com.lobster.pet.view.LobsterView
+import com.lobster.pet.voice.VoiceRecognizer
+import com.lobster.pet.voice.CommandProcessor
 import kotlin.random.Random
 
 /**
@@ -47,9 +49,14 @@ class FloatingLobsterService : Service() {
     private var currentAnimation: Runnable? = null
     private var menuCloseRunnable: Runnable? = null
     
+    // 语音控制
+    private var voiceRecognizer: VoiceRecognizer? = null
+    private var commandProcessor: CommandProcessor? = null
+    private var isListening = false
+    
     private val moveRunnable = object : Runnable {
         override fun run() {
-            if (isMoving && !isTouching && !isMenuOpen) {
+            if (isMoving && !isTouching && !isMenuOpen && !isListening) {
                 randomMove()
             }
             // 随机间隔 2-6 秒
@@ -67,6 +74,43 @@ class FloatingLobsterService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         initFloatingWindow()
         startHungerTimer()
+        initVoice()
+    }
+
+    /**
+     * 初始化语音识别
+     */
+    private fun initVoice() {
+        commandProcessor = CommandProcessor(this)
+        voiceRecognizer = VoiceRecognizer(this, object : VoiceRecognizer.OnVoiceResultListener {
+            override fun onResult(text: String) {
+                isListening = false
+                lobsterView.showNormal()
+                showToast("你说: $text")
+                commandProcessor?.processCommand(text)
+            }
+
+            override fun onError(error: String) {
+                isListening = false
+                lobsterView.showNormal()
+                showToast(error)
+            }
+        })
+    }
+
+    /**
+     * 开始语音指令
+     */
+    fun startVoiceCommand() {
+        if (isListening) return
+        if (voiceRecognizer == null) {
+            showToast("语音识别不可用")
+            return
+        }
+        isListening = true
+        lobsterView.showListening()
+        voiceRecognizer?.startListening()
+        showToast("请说话...")
     }
 
     private fun initFloatingWindow() {
@@ -325,6 +369,8 @@ class FloatingLobsterService : Service() {
         super.onDestroy()
         instance = null
         handler.removeCallbacksAndMessages(null)
+        voiceRecognizer?.destroy()
+        voiceRecognizer = null
         try {
             if (::lobsterView.isInitialized) {
                 windowManager.removeView(lobsterView)

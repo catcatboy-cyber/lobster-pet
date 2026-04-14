@@ -49,6 +49,16 @@ class MenuActivity : Activity() {
         }
         layout.addView(status)
         
+        // 语音指令按钮
+        val btnVoice = Button(this).apply {
+            text = "🎤 语音指令"
+            setOnClickListener {
+                FloatingLobsterService.instance?.startVoiceCommand()
+                finish()
+            }
+        }
+        layout.addView(btnVoice)
+        
         // 喂食按钮
         val btnFeed = Button(this).apply {
             text = "🍤 喂食"
