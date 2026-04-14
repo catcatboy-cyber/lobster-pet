@@ -1,0 +1,119 @@
+# Bitrise CI/CD 配置文件
+# 用于自动构建语音龙虾 Android 应用
+
+format_version: '11'
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+
+project_type: android
+
+workflows:
+  # 主构建流程 - 每次推送代码时触发
+  primary:
+    steps:
+    - activate-ssh-key@4:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@8: {}
+    
+    - cache-pull@2: {}
+    
+    # 设置 Java 17 (Android Gradle Plugin 8.x 需要)
+    - set-java-version@1:
+        inputs:
+        - set_java_version: '17'
+    
+    # 安装依赖并构建
+    - install-missing-android-tools@3:
+        inputs:
+        - gradlew_path: "$PROJECT_LOCATION/gradlew"
+    
+    - android-unit-test@1:
+        inputs:
+        - project_location: "$PROJECT_LOCATION"
+        - variant: "$VARIANT"
+        
+    - android-build@1:
+        inputs:
+        - project_location: "$PROJECT_LOCATION"
+        - module: "$MODULE"
+        - variant: "$VARIANT"
+        
+    - sign-apk@1:
+        run_if: '{{getenv "BITRISEIO_ANDROID_KEYSTORE_URL" | ne ""}}'
+        inputs:
+        - keystore_url: "$BITRISEIO_ANDROID_KEYSTORE_URL"
+        - keystore_password: "$BITRISEIO_ANDROID_KEYSTORE_PASSWORD"
+        - keystore_alias: "$BITRISEIO_ANDROID_KEYSTORE_ALIAS"
+        - private_key_password: "$BITRISEIO_ANDROID_KEYSTORE_PRIVATE_KEY_PASSWORD"
+        - jar_signer_signature_algorithm: "SHA256withRSA"
+        
+    - cache-push@2: {}
+    
+    # 部署到 Bitrise Artifacts
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - notify_user_groups: none
+        - is_enable_public_page: 'true'
+
+  # 每日自动构建流程
+  scheduled:
+    steps:
+    - activate-ssh-key@4:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@8: {}
+    - cache-pull@2: {}
+    - set-java-version@1:
+        inputs:
+        - set_java_version: '17'
+    - install-missing-android-tools@3:
+        inputs:
+        - gradlew_path: "$PROJECT_LOCATION/gradlew"
+    - android-build@1:
+        inputs:
+        - project_location: "$PROJECT_LOCATION"
+        - module: "$MODULE"
+        - variant: "$VARIANT"
+    - sign-apk@1:
+        run_if: '{{getenv "BITRISEIO_ANDROID_KEYSTORE_URL" | ne ""}}'
+    - cache-push@2: {}
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - notify_user_groups: none
+
+  # 手动触发构建 Debug APK
+  build-debug:
+    steps:
+    - activate-ssh-key@4: {}
+    - git-clone@8: {}
+    - cache-pull@2: {}
+    - set-java-version@1:
+        inputs:
+        - set_java_version: '17'
+    - install-missing-android-tools@3:
+        inputs:
+        - gradlew_path: "$PROJECT_LOCATION/gradlew"
+    - android-build@1:
+        inputs:
+        - project_location: "$PROJECT_LOCATION"
+        - module: "$MODULE"
+        - variant: debug
+        - build_type: apk
+    - deploy-to-bitrise-io@2:
+        inputs:
+        - is_enable_public_page: 'true'
+
+app:
+  envs:
+  - opts:
+      is_expand: false
+    PROJECT_LOCATION: "."
+  - opts:
+      is_expand: false
+    MODULE: "app"
+  - opts:
+      is_expand: false
+    VARIANT: "release"
+
+meta:
+  bitrise.io:
+    stack: linux-docker-android-20.04
+    machine_type_id: standard

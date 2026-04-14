@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">语音龙虾</string>
+    <string name="accessibility_service_label">语音龙虾辅助功能</string>
+    <string name="accessibility_service_description">用于自动在社交APP中输入文字。开启后，你可以对龙虾说「发送你好」来自动输入消息。</string>
+</resources>

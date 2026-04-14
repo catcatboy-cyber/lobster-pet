@@ -1,0 +1,18 @@
+[versions]
+agp = "8.2.0"
+android-compileSdk = "34"
+android-minSdk = "24"
+android-targetSdk = "34"
+kotlin = "1.9.21"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.12.0" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version = "1.6.1" }
+material = { group = "com.google.android.material", name = "material", version = "1.11.0" }
+androidx-activity = { group = "androidx.activity", name = "activity-ktx", version = "1.8.0" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version = "2.1.4" }
+lottie = { group = "com.airbnb.android", name = "lottie", version = "6.3.0" }
+
+[plugins]
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+jetbrainsKotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
