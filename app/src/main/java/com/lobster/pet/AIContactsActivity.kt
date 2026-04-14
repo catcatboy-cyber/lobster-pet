@@ -163,18 +163,42 @@ class AIContactsActivity : AppCompatActivity() {
     }
 
     private fun isAccessibilityEnabled(): Boolean {
+        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+        
+        // 方法1: 检查是否启用了我们的服务
         val enabledServices = android.provider.Settings.Secure.getString(
             contentResolver,
             android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
         
-        // 检查完整服务名（多种可能格式）
-        val componentName = "$packageName/.service.LobsterAccessibilityService"
-        val fullClassName = "$packageName/com.lobster.pet.service.LobsterAccessibilityService"
+        // 打印日志帮助调试
+        android.util.Log.d("LobsterDebug", "Enabled services: $enabledServices")
+        android.util.Log.d("LobsterDebug", "Package name: $packageName")
         
-        return enabledServices.contains(componentName) || 
-               enabledServices.contains(fullClassName) ||
-               enabledServices.contains("LobsterAccessibilityService")
+        // 多种可能的服务名格式
+        val possibleNames = listOf(
+            "$packageName/.service.LobsterAccessibilityService",
+            "$packageName/com.lobster.pet.service.LobsterAccessibilityService",
+            "com.lobster.pet/.service.LobsterAccessibilityService",
+            "com.lobster.pet/com.lobster.pet.service.LobsterAccessibilityService",
+            "LobsterAccessibilityService"
+        )
+        
+        for (name in possibleNames) {
+            if (enabledServices.contains(name)) {
+                android.util.Log.d("LobsterDebug", "Found match: $name")
+                return true
+            }
+        }
+        
+        // 方法2: 尝试获取服务实例（如果服务正在运行）
+        val instance = com.lobster.pet.service.LobsterAccessibilityService.getInstance()
+        if (instance != null) {
+            android.util.Log.d("LobsterDebug", "Service instance is running")
+            return true
+        }
+        
+        return false
     }
 
     private fun openAccessibilitySettings() {
