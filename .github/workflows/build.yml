@@ -3,8 +3,6 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master, develop ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -38,28 +36,19 @@ jobs:
       run: chmod +x gradlew
     
     - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --stacktrace
+    
+    - name: List build outputs
+      run: |
+        echo "Listing APK files:"
+        find app/build/outputs -name "*.apk" -type f
+        echo "---"
+        ls -lah app/build/outputs/apk/debug/ || echo "Debug dir not found"
     
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: lobster-pet-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: app/build/outputs/apk/debug/*.apk
         retention-days: 30
-    
-    - name: Build Release APK
-      run: ./gradlew assembleRelease
-    
-    - name: Upload Release APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: lobster-pet-release-apk
-        path: app/build/outputs/apk/release/app-release-unsigned.apk
-        retention-days: 30
-    
-    - name: Show APK Info
-      run: |
-        echo "=== Debug APK ==="
-        ls -lh app/build/outputs/apk/debug/
-        echo "=== Release APK ==="
-        ls -lh app/build/outputs/apk/release/
+        if-no-files-found: warn
