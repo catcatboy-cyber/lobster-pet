@@ -38,17 +38,16 @@ jobs:
     - name: Build Debug APK
       run: ./gradlew assembleDebug --stacktrace
     
-    - name: List build outputs
+    - name: Find and copy APK
       run: |
-        echo "Listing APK files:"
-        find app/build/outputs -name "*.apk" -type f
-        echo "---"
-        ls -lah app/build/outputs/apk/debug/ || echo "Debug dir not found"
+        mkdir -p output
+        find . -name "*.apk" -type f -exec cp {} output/ \;
+        ls -lah output/
     
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: lobster-pet-debug-apk
-        path: app/build/outputs/apk/debug/*.apk
+        name: lobster-pet-apk
+        path: output/*.apk
         retention-days: 30
         if-no-files-found: warn
