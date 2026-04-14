@@ -37,6 +37,10 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnAccessibility).setOnClickListener {
             openAccessibilitySettings()
         }
+
+        findViewById<Button>(R.id.btnAIChat).setOnClickListener {
+            startActivity(Intent(this, AIContactsActivity::class.java))
+        }
     }
 
     private fun checkAndStartService() {

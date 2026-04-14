@@ -39,6 +39,13 @@
             android:taskAffinity=""
             android:exported="false" />
 
+        <!-- AI 代聊管理界面 -->
+        <activity
+            android:name=".AIContactsActivity"
+            android:label="AI 代聊管理"
+            android:parentActivityName=".MainActivity"
+            android:exported="false" />
+
         <!-- 悬浮窗服务 -->
         <service
             android:name=".service.FloatingLobsterService"
