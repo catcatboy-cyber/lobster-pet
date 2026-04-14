@@ -163,12 +163,18 @@ class AIContactsActivity : AppCompatActivity() {
     }
 
     private fun isAccessibilityEnabled(): Boolean {
-        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
         val enabledServices = android.provider.Settings.Secure.getString(
             contentResolver,
             android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
-        return enabledServices.contains(packageName)
+        
+        // 检查完整服务名（多种可能格式）
+        val componentName = "$packageName/.service.LobsterAccessibilityService"
+        val fullClassName = "$packageName/com.lobster.pet.service.LobsterAccessibilityService"
+        
+        return enabledServices.contains(componentName) || 
+               enabledServices.contains(fullClassName) ||
+               enabledServices.contains("LobsterAccessibilityService")
     }
 
     private fun openAccessibilitySettings() {
