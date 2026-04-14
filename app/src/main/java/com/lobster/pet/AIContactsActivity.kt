@@ -1,9 +1,13 @@
 package com.lobster.pet
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.AccessibilityManager
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -12,7 +16,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.lobster.pet.ai.AIChatManager
 import com.lobster.pet.data.db.ChatContact
+import com.lobster.pet.service.LobsterAccessibilityService
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /**
  * AI 代聊联系人管理界面
@@ -47,6 +53,9 @@ class AIContactsActivity : AppCompatActivity() {
             },
             onDeleteClick = { contact ->
                 deleteContact(contact)
+            },
+            onTestClick = { contact ->
+                testSendMessage(contact)
             }
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -125,6 +134,42 @@ class AIContactsActivity : AppCompatActivity() {
             .setNegativeButton("取消", null)
             .show()
     }
+
+    /**
+     * 测试主动发送消息
+     */
+    private fun testSendMessage(contact: ChatContact) {
+        // 检查辅助功能
+        if (!isAccessibilityEnabled()) {
+            Toast.makeText(this, "请先开启辅助功能", Toast.LENGTH_LONG).show()
+            openAccessibilitySettings()
+            return
+        }
+
+        Toast.makeText(this, "正在打开微信找 ${contact.contactName}...", Toast.LENGTH_SHORT).show()
+
+        // 启动微信并搜索联系人
+        val intent = packageManager.getLaunchIntentForPackage("com.tencent.mm")
+        if (intent != null) {
+            startActivity(intent)
+            // 延迟后让辅助服务去搜索
+            lifecycleScope.launch {
+                kotlinx.coroutines.delay(2000)
+                LobsterAccessibilityService.startTestChat(contact.contactName, "你好吗？")
+            }
+        } else {
+            Toast.makeText(this, "未安装微信", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun isAccessibilityEnabled(): Boolean {
+        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+        val enabledServices = android.provider.Settings.Secure.getString(
+            contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabledServices.contains(packageName)
+    }
     
     private fun showAddContactDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_contact, null)
@@ -183,7 +228,8 @@ class AIContactsActivity : AppCompatActivity() {
     class ContactAdapter(
         private val onToggleEnabled: (ChatContact, Boolean) -> Unit,
         private val onEditClick: (ChatContact) -> Unit,
-        private val onDeleteClick: (ChatContact) -> Unit
+        private val onDeleteClick: (ChatContact) -> Unit,
+        private val onTestClick: (ChatContact) -> Unit
     ) : RecyclerView.Adapter<ContactAdapter.ViewHolder>() {
         
         private var contacts: List<ChatContact> = emptyList()
@@ -211,6 +257,7 @@ class AIContactsActivity : AppCompatActivity() {
             private val switchEnabled: Switch = itemView.findViewById(R.id.switchEnabled)
             private val btnEdit: Button = itemView.findViewById(R.id.btnEdit)
             private val btnDelete: Button = itemView.findViewById(R.id.btnDelete)
+            private val btnTest: Button = itemView.findViewById(R.id.btnTest)
             
             fun bind(contact: ChatContact) {
                 tvName.text = contact.contactName
@@ -223,6 +270,7 @@ class AIContactsActivity : AppCompatActivity() {
                 
                 btnEdit.setOnClickListener { onEditClick(contact) }
                 btnDelete.setOnClickListener { onDeleteClick(contact) }
+                btnTest.setOnClickListener { onTestClick(contact) }
             }
         }
     }

@@ -325,6 +325,82 @@ class LobsterAccessibilityService : AccessibilityService() {
         fun getInstance(): LobsterAccessibilityService? = instance
 
         /**
+         * 测试：主动打开微信并发送消息
+         */
+        fun startTestChat(contactName: String, message: String) {
+            val service = instance ?: return
+            service.serviceScope.launch {
+                try {
+                    delay(2000) // 等微信启动
+                    
+                    // 1. 点击搜索按钮或查找搜索框
+                    val rootNode = service.rootInActiveWindow ?: return@launch
+                    
+                    try {
+                        // 尝试点击搜索按钮
+                        val searchBtn = rootNode.findAccessibilityNodeInfosByViewId(
+                            "${service.WECHAT_PACKAGE}:id/fcz"
+                        ).firstOrNull() ?: rootNode.findAccessibilityNodeInfosByViewId(
+                            "${service.WECHAT_PACKAGE}:id/bhn"
+                        ).firstOrNull()
+                        
+                        if (searchBtn != null) {
+                            searchBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            searchBtn.recycle()
+                            delay(1000)
+                        }
+                        
+                        // 2. 在搜索框输入联系人名字
+                        val rootNode2 = service.rootInActiveWindow ?: return@launch
+                        try {
+                            val searchInput = rootNode2.findAccessibilityNodeInfosByViewId(
+                                "${service.WECHAT_PACKAGE}:id/bfl"
+                            ).firstOrNull() ?: rootNode2.findAccessibilityNodeInfosByViewId(
+                                "${service.WECHAT_PACKAGE}:id/cd5"
+                            ).firstOrNull()
+                            
+                            if (searchInput != null) {
+                                val args = Bundle()
+                                args.putCharSequence(
+                                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                                    contactName
+                                )
+                                searchInput.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                                searchInput.recycle()
+                                delay(1500)
+                                
+                                // 3. 点击搜索结果中的联系人
+                                val rootNode3 = service.rootInActiveWindow ?: return@launch
+                                try {
+                                    // 尝试找到联系人项并点击
+                                    val contactItem = rootNode3.findAccessibilityNodeInfosByText(contactName)
+                                        .firstOrNull()
+                                    
+                                    if (contactItem != null) {
+                                        contactItem.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                                        contactItem.recycle()
+                                        delay(1500)
+                                        
+                                        // 4. 发送消息
+                                        service.sendReply(message)
+                                    }
+                                } finally {
+                                    rootNode3.recycle()
+                                }
+                            }
+                        } finally {
+                            rootNode2.recycle()
+                        }
+                    } finally {
+                        rootNode.recycle()
+                    }
+                } catch (e: Exception) {
+                    Log.e("LobsterAccessibility", "Test chat failed", e)
+                }
+            }
+        }
+
+        /**
          * 在当前输入框中输入文字（供外部调用）
          */
         fun inputText(text: String): Boolean {
