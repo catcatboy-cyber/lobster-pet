@@ -7,7 +7,6 @@ import android.graphics.Path
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import com.lobster.pet.voice.CommandProcessor
 
 /**
  * 辅助功能服务 - 用于自动输入文字和操作界面
@@ -15,7 +14,7 @@ import com.lobster.pet.voice.CommandProcessor
 class LobsterAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // 监听窗口变化（可选）
+        // 不监听事件，避免性能问题
     }
 
     override fun onInterrupt() {}
@@ -42,32 +41,51 @@ class LobsterAccessibilityService : AccessibilityService() {
             val service = instance ?: return false
             val rootNode = service.rootInActiveWindow ?: return false
 
-            // 查找当前聚焦的输入框
-            val focusedNode = findFocusedEditText(rootNode)
-            return if (focusedNode != null) {
-                val arguments = Bundle()
-                arguments.putCharSequence(
-                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                    text
-                )
-                focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-            } else {
-                false
+            return try {
+                // 查找当前聚焦的输入框
+                val focusedNode = findFocusedEditText(rootNode)
+                if (focusedNode != null) {
+                    val arguments = Bundle()
+                    arguments.putCharSequence(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                        text
+                    )
+                    val result = focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                    focusedNode.recycle() // 回收节点
+                    result
+                } else {
+                    false
+                }
+            } finally {
+                rootNode.recycle() // 回收根节点
             }
         }
 
         /**
-         * 查找当前聚焦的输入框
+         * 查找当前聚焦的输入框 - 使用栈而非递归避免深度问题
          */
         private fun findFocusedEditText(rootNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-            if (rootNode.isFocused && rootNode.isEditable) {
-                return rootNode
-            }
+            val stack = ArrayDeque<AccessibilityNodeInfo>()
+            stack.add(rootNode)
 
-            for (i in 0 until rootNode.childCount) {
-                val child = rootNode.getChild(i) ?: continue
-                val result = findFocusedEditText(child)
-                if (result != null) return result
+            while (stack.isNotEmpty()) {
+                val node = stack.removeLast()
+
+                if (node.isFocused && node.isEditable) {
+                    return node
+                }
+
+                // 添加子节点到栈
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { child ->
+                        stack.add(child)
+                    }
+                }
+
+                // 如果当前节点不是我们要找的，回收它
+                if (node !== rootNode) {
+                    node.recycle()
+                }
             }
             return null
         }

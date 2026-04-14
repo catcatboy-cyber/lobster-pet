@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.speech.SpeechRecognizer
+import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -34,15 +35,18 @@ class FloatingLobsterService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var isMoving = true
+    private var isTouching = false
     private val random = Random
-
-    // 随机游动相关
+    
+    // 动画控制
+    private var currentAnimation: Runnable? = null
     private val moveRunnable = object : Runnable {
         override fun run() {
-            if (isMoving) {
+            if (isMoving && !isTouching) {
                 randomMove()
-                // 随机间隔 2-5 秒
-                handler.postDelayed(this, (2000 + random.nextInt(3000)).toLong())
+                handler.postDelayed(this, (3000 + random.nextInt(4000)).toLong())
+            } else {
+                handler.postDelayed(this, 1000)
             }
         }
     }
@@ -76,7 +80,7 @@ class FloatingLobsterService : Service() {
             y = 500
         }
 
-        // 点击监听 - 点击龙虾开始听指令
+        // 点击监听
         lobsterView.setOnClickListener {
             lobsterView.showListening()
             voiceRecognizer.startListening()
@@ -87,11 +91,13 @@ class FloatingLobsterService : Service() {
         var initialY = 0
         var touchX = 0f
         var touchY = 0f
+        var isDragging = false
 
         lobsterView.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    isMoving = false
+                    isTouching = true
+                    isDragging = false
                     initialX = params.x
                     initialY = params.y
                     touchX = event.rawX
@@ -99,58 +105,84 @@ class FloatingLobsterService : Service() {
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    params.x = initialX + (event.rawX - touchX).toInt()
-                    params.y = initialY + (event.rawY - touchY).toInt()
-                    windowManager.updateViewLayout(lobsterView, params)
+                    val deltaX = Math.abs(event.rawX - touchX)
+                    val deltaY = Math.abs(event.rawY - touchY)
+                    if (deltaX > 10 || deltaY > 10) {
+                        isDragging = true
+                        params.x = initialX + (event.rawX - touchX).toInt()
+                        params.y = initialY + (event.rawY - touchY).toInt()
+                        try {
+                            windowManager.updateViewLayout(lobsterView, params)
+                        } catch (e: Exception) {
+                            // 忽略更新失败
+                        }
+                    }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    isMoving = true
-                    false
+                    isTouching = false
+                    isDragging
                 }
                 else -> false
             }
         }
 
-        windowManager.addView(lobsterView, params)
-        handler.post(moveRunnable)
+        try {
+            windowManager.addView(lobsterView, params)
+            handler.postDelayed(moveRunnable, 2000)
+        } catch (e: Exception) {
+            stopSelf()
+        }
     }
 
     private fun initVoiceRecognizer() {
-        voiceRecognizer = VoiceRecognizer(this, object : VoiceRecognizer.OnVoiceResultListener {
-            override fun onResult(text: String) {
-                lobsterView.showNormal()
-                commandProcessor.processCommand(text)
-            }
+        try {
+            voiceRecognizer = VoiceRecognizer(this, object : VoiceRecognizer.OnVoiceResultListener {
+                override fun onResult(text: String) {
+                    lobsterView.showNormal()
+                    commandProcessor.processCommand(text)
+                }
 
-            override fun onError(error: String) {
-                lobsterView.showNormal()
-                // 错误处理，可以显示一个小提示
-            }
-        })
+                override fun onError(error: String) {
+                    lobsterView.showNormal()
+                }
+            })
+        } catch (e: Exception) {
+            // 语音识别初始化失败，继续运行但不支持语音
+        }
     }
 
     private fun randomMove() {
-        // 计算新位置（小范围移动）
-        val deltaX = random.nextInt(200) - 100
-        val deltaY = random.nextInt(200) - 100
+        if (isTouching) return
 
-        val newX = (params.x + deltaX).coerceIn(0, getScreenWidth() - 200)
-        val newY = (params.y + deltaY).coerceIn(0, getScreenHeight() - 200)
+        val deltaX = random.nextInt(150) - 75
+        val deltaY = random.nextInt(150) - 75
 
-        // 动画移动
-        val startX = params.x
-        val startY = params.y
-        val duration = 1000L
+        val (screenWidth, screenHeight) = getScreenSize()
+        val newX = (params.x + deltaX).coerceIn(50, screenWidth - 250)
+        val newY = (params.y + deltaY).coerceIn(100, screenHeight - 300)
+
+        animateMove(params.x, params.y, newX, newY)
+    }
+
+    private fun animateMove(startX: Int, startY: Int, endX: Int, endY: Int) {
+        // 取消之前的动画
+        currentAnimation?.let { handler.removeCallbacks(it) }
+        
+        val duration = 800L
         val startTime = System.currentTimeMillis()
 
-        val animation = object : Runnable {
+        currentAnimation = object : Runnable {
             override fun run() {
+                if (isTouching || !::lobsterView.isInitialized) return
+                
                 val elapsed = System.currentTimeMillis() - startTime
                 val progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
+                // 使用缓动函数
+                val eased = progress * (2 - progress)
 
-                params.x = (startX + (newX - startX) * progress).toInt()
-                params.y = (startY + (newY - startY) * progress).toInt()
+                params.x = (startX + (endX - startX) * eased).toInt()
+                params.y = (startY + (endY - startY) * eased).toInt()
 
                 try {
                     windowManager.updateViewLayout(lobsterView, params)
@@ -158,21 +190,23 @@ class FloatingLobsterService : Service() {
                     return
                 }
 
-                if (progress < 1f) {
+                if (progress < 1f && !isTouching) {
                     handler.postDelayed(this, 16)
                 }
             }
         }
 
-        handler.post(animation)
+        handler.post(currentAnimation!!)
     }
 
-    private fun getScreenWidth(): Int {
-        return windowManager.defaultDisplay.width
-    }
-
-    private fun getScreenHeight(): Int {
-        return windowManager.defaultDisplay.height
+    private fun getScreenSize(): Pair<Int, Int> {
+        return try {
+            val metrics = DisplayMetrics()
+            windowManager.defaultDisplay.getMetrics(metrics)
+            Pair(metrics.widthPixels, metrics.heightPixels)
+        } catch (e: Exception) {
+            Pair(1080, 1920) // 默认值
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -199,10 +233,16 @@ class FloatingLobsterService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        handler.removeCallbacks(moveRunnable)
-        voiceRecognizer.destroy()
-        if (::lobsterView.isInitialized) {
-            windowManager.removeView(lobsterView)
+        handler.removeCallbacksAndMessages(null)
+        try {
+            if (::voiceRecognizer.isInitialized) {
+                voiceRecognizer.destroy()
+            }
+            if (::lobsterView.isInitialized) {
+                windowManager.removeView(lobsterView)
+            }
+        } catch (e: Exception) {
+            // 忽略清理错误
         }
     }
 
