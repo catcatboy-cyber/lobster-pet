@@ -81,6 +81,12 @@ class MenuActivity : Activity() {
         setContentView(layout)
     }
     
+    override fun onDestroy() {
+        super.onDestroy()
+        // 通知服务菜单已关闭
+        FloatingLobsterService.instance?.onMenuClosed()
+    }
+    
     private fun getStatusText(hunger: Int, happiness: Int): String {
         val hungerText = when {
             hunger > 80 -> "饱饱的 😊"

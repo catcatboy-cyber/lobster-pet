@@ -45,6 +45,8 @@ class FloatingLobsterService : Service() {
     
     // 动画控制
     private var currentAnimation: Runnable? = null
+    private var menuCloseRunnable: Runnable? = null
+    
     private val moveRunnable = object : Runnable {
         override fun run() {
             if (isMoving && !isTouching && !isMenuOpen) {
@@ -57,6 +59,10 @@ class FloatingLobsterService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // 确保 instance 指向当前实例
+        if (instance != null && instance !== this) {
+            // 如果之前有旧实例，清理引用
+        }
         instance = this
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         initFloatingWindow()
@@ -134,7 +140,7 @@ class FloatingLobsterService : Service() {
                         // 单击 - 显示菜单
                         showMenu()
                     }
-                    isDragging
+                    true
                 }
                 else -> false
             }
@@ -156,6 +162,9 @@ class FloatingLobsterService : Service() {
         isMenuOpen = true
         isMoving = false
         
+        // 取消之前的关闭任务
+        menuCloseRunnable?.let { handler.removeCallbacks(it) }
+        
         // 创建菜单对话框
         val menuIntent = Intent(this, MenuActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -164,11 +173,23 @@ class FloatingLobsterService : Service() {
         }
         startActivity(menuIntent)
         
-        // 3秒后恢复
-        handler.postDelayed({
-            isMenuOpen = false
-            isMoving = true
-        }, 3000)
+        // 3秒后恢复（如果菜单没手动关闭）
+        menuCloseRunnable = Runnable {
+            if (isMenuOpen) {
+                isMenuOpen = false
+                isMoving = true
+            }
+        }
+        handler.postDelayed(menuCloseRunnable!!, 3000)
+    }
+
+    /**
+     * 菜单关闭时调用（由 MenuActivity 触发）
+     */
+    fun onMenuClosed() {
+        menuCloseRunnable?.let { handler.removeCallbacks(it) }
+        isMenuOpen = false
+        isMoving = true
     }
 
     /**
@@ -271,7 +292,7 @@ class FloatingLobsterService : Service() {
     }
 
     private fun Int.dpToPx(): Int {
-        return (this * resources.displayMetrics.density).toInt()
+        return (this * applicationContext.resources.displayMetrics.density).toInt()
     }
 
     private fun showToast(msg: String) {
