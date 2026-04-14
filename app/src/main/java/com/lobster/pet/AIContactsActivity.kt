@@ -170,6 +170,12 @@ class AIContactsActivity : AppCompatActivity() {
         ) ?: return false
         return enabledServices.contains(packageName)
     }
+
+    private fun openAccessibilitySettings() {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        startActivity(intent)
+        Toast.makeText(this, "请开启「语音龙虾」辅助功能", Toast.LENGTH_LONG).show()
+    }
     
     private fun showAddContactDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_contact, null)
