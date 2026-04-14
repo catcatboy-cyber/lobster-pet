@@ -15,9 +15,13 @@ import android.view.animation.LinearInterpolator
  */
 class LobsterView(context: Context) : View(context) {
 
+    enum class State {
+        NORMAL, LISTENING, EATING, HUNGRY, SAD
+    }
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var scale = 1f
-    private var isListening = false
+    private var currentState = State.NORMAL
     private var wavePhase = 0f
 
     private val animator = ValueAnimator.ofFloat(0f, 360f).apply {
@@ -35,12 +39,29 @@ class LobsterView(context: Context) : View(context) {
     }
 
     fun showListening() {
-        isListening = true
+        currentState = State.LISTENING
         invalidate()
     }
 
     fun showNormal() {
-        isListening = false
+        currentState = State.NORMAL
+        invalidate()
+    }
+
+    fun showEating() {
+        currentState = State.EATING
+        invalidate()
+        // 2秒后恢复正常
+        postDelayed({ showNormal() }, 2000)
+    }
+
+    fun showHungry() {
+        currentState = State.HUNGRY
+        invalidate()
+    }
+
+    fun showSad() {
+        currentState = State.SAD
         invalidate()
     }
 
@@ -50,15 +71,31 @@ class LobsterView(context: Context) : View(context) {
         val centerX = width / 2f
         val centerY = height / 2f
 
-        // 绘制龙虾身体（简化的红色椭圆）
-        paint.color = if (isListening) Color.parseColor("#FF6B6B") else Color.parseColor("#E74C3C")
+        // 根据状态选择颜色
+        val bodyColor = when (currentState) {
+            State.LISTENING -> Color.parseColor("#FF6B6B")
+            State.EATING -> Color.parseColor("#FFA07A")
+            State.HUNGRY -> Color.parseColor("#D35400")
+            State.SAD -> Color.parseColor("#7F8C8D")
+            else -> Color.parseColor("#E74C3C")
+        }
+
+        // 绘制龙虾身体
+        paint.color = bodyColor
         paint.style = Paint.Style.FILL
 
         // 身体
         canvas.drawOval(centerX - 40f, centerY - 20f, centerX + 40f, centerY + 30f, paint)
 
         // 头部
-        paint.color = if (isListening) Color.parseColor("#FF8585") else Color.parseColor("#C0392B")
+        val headColor = when (currentState) {
+            State.LISTENING -> Color.parseColor("#FF8585")
+            State.EATING -> Color.parseColor("#FFB6C1")
+            State.HUNGRY -> Color.parseColor("#BA4A00")
+            State.SAD -> Color.parseColor("#616A6B")
+            else -> Color.parseColor("#C0392B")
+        }
+        paint.color = headColor
         canvas.drawCircle(centerX, centerY - 35f, 35f, paint)
 
         // 眼睛
@@ -70,29 +107,99 @@ class LobsterView(context: Context) : View(context) {
         canvas.drawCircle(centerX - 12f, centerY - 45f, 4f, paint)
         canvas.drawCircle(centerX + 12f, centerY - 45f, 4f, paint)
 
-        // 钳子（带简单动画）
-        val waveOffset = Math.sin(Math.toRadians(wavePhase.toDouble())).toFloat() * 10f
+        // 根据状态绘制表情
+        when (currentState) {
+            State.SAD, State.HUNGRY -> drawSadMouth(canvas, centerX, centerY)
+            State.EATING -> drawEatingMouth(canvas, centerX, centerY)
+            else -> drawNormalMouth(canvas, centerX, centerY)
+        }
 
-        paint.color = if (isListening) Color.parseColor("#FF6B6B") else Color.parseColor("#E74C3C")
+        // 钳子动画
+        val waveOffset = Math.sin(Math.toRadians(wavePhase.toDouble())).toFloat() * 10f
+        val eatingOffset = if (currentState == State.EATING) {
+            Math.sin(Math.toRadians(wavePhase * 3.toDouble())).toFloat() * 20f
+        } else 0f
+
+        paint.color = bodyColor
 
         // 左钳
         canvas.save()
-        canvas.rotate(-20f + waveOffset, centerX - 35f, centerY - 20f)
+        val leftClawAngle = when (currentState) {
+            State.EATING -> -20f + eatingOffset
+            State.SAD, State.HUNGRY -> -10f
+            else -> -20f + waveOffset
+        }
+        canvas.rotate(leftClawAngle, centerX - 35f, centerY - 20f)
         drawClaw(canvas, centerX - 35f, centerY - 20f, -1f)
         canvas.restore()
 
         // 右钳
         canvas.save()
-        canvas.rotate(20f - waveOffset, centerX + 35f, centerY - 20f)
+        val rightClawAngle = when (currentState) {
+            State.EATING -> 20f - eatingOffset
+            State.SAD, State.HUNGRY -> 10f
+            else -> 20f - waveOffset
+        }
+        canvas.rotate(rightClawAngle, centerX + 35f, centerY - 20f)
         drawClaw(canvas, centerX + 35f, centerY - 20f, 1f)
         canvas.restore()
 
         // 尾巴
         drawTail(canvas, centerX, centerY + 30f)
 
-        // 如果正在听，显示声波效果
-        if (isListening) {
-            drawWaveEffect(canvas, centerX, centerY)
+        // 特效
+        when (currentState) {
+            State.LISTENING -> drawWaveEffect(canvas, centerX, centerY)
+            State.EATING -> drawFoodParticle(canvas, centerX, centerY)
+            State.HUNGRY -> drawHungrySymbol(canvas, centerX, centerY - 60f)
+            State.SAD -> drawTear(canvas, centerX, centerY - 35f)
+            else -> {}
+        }
+    }
+
+    private fun drawNormalMouth(canvas: Canvas, x: Float, y: Float) {
+        paint.color = Color.BLACK
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3f
+        canvas.drawArc(x - 15f, y - 35f, x + 15f, y - 25f, 0f, 180f, false, paint)
+        paint.style = Paint.Style.FILL
+    }
+
+    private fun drawSadMouth(canvas: Canvas, x: Float, y: Float) {
+        paint.color = Color.BLACK
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3f
+        canvas.drawArc(x - 15f, y - 40f, x + 15f, y - 30f, 0f, -180f, false, paint)
+        paint.style = Paint.Style.FILL
+    }
+
+    private fun drawEatingMouth(canvas: Canvas, x: Float, y: Float) {
+        paint.color = Color.parseColor("#8B4513")
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(x, y - 30f, 8f, paint)
+    }
+
+    private fun drawHungrySymbol(canvas: Canvas, x: Float, y: Float) {
+        paint.color = Color.parseColor("#F39C12")
+        paint.textSize = 30f
+        paint.textAlign = Paint.Align.CENTER
+        canvas.drawText("🍤", x, y, paint)
+    }
+
+    private fun drawTear(canvas: Canvas, x: Float, y: Float) {
+        paint.color = Color.parseColor("#3498DB")
+        val tearOffset = (System.currentTimeMillis() % 1000) / 1000f * 20f
+        canvas.drawCircle(x + 15f, y + 10f + tearOffset, 3f, paint)
+    }
+
+    private fun drawFoodParticle(canvas: Canvas, x: Float, y: Float) {
+        paint.color = Color.parseColor("#F39C12")
+        val particles = listOf(
+            Pair(-20f, -50f), Pair(0f, -60f), Pair(20f, -50f),
+            Pair(-10f, -40f), Pair(10f, -40f)
+        )
+        particles.forEach { (px, py) ->
+            canvas.drawCircle(x + px, y + py, 5f, paint)
         }
     }
 

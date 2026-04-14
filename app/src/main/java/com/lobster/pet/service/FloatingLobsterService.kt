@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.speech.SpeechRecognizer
 import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.MotionEvent
@@ -21,41 +20,46 @@ import com.lobster.pet.LobsterApp
 import com.lobster.pet.MainActivity
 import com.lobster.pet.R
 import com.lobster.pet.view.LobsterView
-import com.lobster.pet.voice.CommandProcessor
-import com.lobster.pet.voice.VoiceRecognizer
 import kotlin.random.Random
 
+/**
+ * 悬浮窗服务 - 类似 iOS 辅助触控的小白点
+ * 特点：不影响屏幕滑动，点击龙虾有交互
+ */
 class FloatingLobsterService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var lobsterView: LobsterView
     private lateinit var params: WindowManager.LayoutParams
-    private lateinit var voiceRecognizer: VoiceRecognizer
-    private val commandProcessor = CommandProcessor(this)
 
     private val handler = Handler(Looper.getMainLooper())
     private var isMoving = true
     private var isTouching = false
+    private var isMenuOpen = false
     private val random = Random
+    
+    // 饲养状态
+    private var hungerLevel = 50 // 0-100，越低越饿
+    private var happinessLevel = 70 // 0-100，心情值
     
     // 动画控制
     private var currentAnimation: Runnable? = null
     private val moveRunnable = object : Runnable {
         override fun run() {
-            if (isMoving && !isTouching) {
+            if (isMoving && !isTouching && !isMenuOpen) {
                 randomMove()
-                handler.postDelayed(this, (3000 + random.nextInt(4000)).toLong())
-            } else {
-                handler.postDelayed(this, 1000)
             }
+            // 随机间隔 2-6 秒
+            handler.postDelayed(this, (2000 + random.nextInt(4000)).toLong())
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         initFloatingWindow()
-        initVoiceRecognizer()
+        startHungerTimer()
     }
 
     private fun initFloatingWindow() {
@@ -67,12 +71,14 @@ class FloatingLobsterService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        // 关键配置：不拦截触摸事件，像 iOS 辅助触控一样
         params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            120.dpToPx(), // 固定小尺寸，只覆盖龙虾
+            120.dpToPx(),
             layoutType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or      // 不获取焦点
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or    // 触摸事件穿透
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,     // 可以超出屏幕边界
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -80,24 +86,26 @@ class FloatingLobsterService : Service() {
             y = 500
         }
 
-        // 点击监听
-        lobsterView.setOnClickListener {
-            lobsterView.showListening()
-            voiceRecognizer.startListening()
-        }
+        // 设置龙虾视图大小
+        lobsterView.layoutParams = android.widget.FrameLayout.LayoutParams(
+            120.dpToPx(),
+            120.dpToPx()
+        )
 
-        // 长按拖动
+        // 触摸处理：单击菜单，长按拖动
         var initialX = 0
         var initialY = 0
         var touchX = 0f
         var touchY = 0f
         var isDragging = false
+        var touchStartTime = 0L
 
         lobsterView.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     isTouching = true
                     isDragging = false
+                    touchStartTime = System.currentTimeMillis()
                     initialX = params.x
                     initialY = params.y
                     touchX = event.rawX
@@ -107,20 +115,24 @@ class FloatingLobsterService : Service() {
                 MotionEvent.ACTION_MOVE -> {
                     val deltaX = Math.abs(event.rawX - touchX)
                     val deltaY = Math.abs(event.rawY - touchY)
-                    if (deltaX > 10 || deltaY > 10) {
+                    val moveThreshold = 15.dpToPx()
+                    
+                    if (deltaX > moveThreshold || deltaY > moveThreshold) {
                         isDragging = true
                         params.x = initialX + (event.rawX - touchX).toInt()
                         params.y = initialY + (event.rawY - touchY).toInt()
-                        try {
-                            windowManager.updateViewLayout(lobsterView, params)
-                        } catch (e: Exception) {
-                            // 忽略更新失败
-                        }
+                        updateViewPosition()
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     isTouching = false
+                    val touchDuration = System.currentTimeMillis() - touchStartTime
+                    
+                    if (!isDragging && touchDuration < 300) {
+                        // 单击 - 显示菜单
+                        showMenu()
+                    }
                     isDragging
                 }
                 else -> false
@@ -135,60 +147,100 @@ class FloatingLobsterService : Service() {
         }
     }
 
-    private fun initVoiceRecognizer() {
-        try {
-            voiceRecognizer = VoiceRecognizer(this, object : VoiceRecognizer.OnVoiceResultListener {
-                override fun onResult(text: String) {
-                    lobsterView.showNormal()
-                    commandProcessor.processCommand(text)
-                }
-
-                override fun onError(error: String) {
-                    lobsterView.showNormal()
-                }
-            })
-        } catch (e: Exception) {
-            // 语音识别初始化失败，继续运行但不支持语音
+    /**
+     * 显示菜单：喂食、退出
+     */
+    private fun showMenu() {
+        if (isMenuOpen) return
+        isMenuOpen = true
+        isMoving = false
+        
+        // 创建菜单对话框
+        val menuIntent = Intent(this, MenuActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            putExtra("hunger", hungerLevel)
+            putExtra("happiness", happinessLevel)
         }
+        startActivity(menuIntent)
+        
+        // 3秒后恢复
+        handler.postDelayed({
+            isMenuOpen = false
+            isMoving = true
+        }, 3000)
+    }
+
+    /**
+     * 喂食
+     */
+    fun feed() {
+        hungerLevel = (hungerLevel + 30).coerceAtMost(100)
+        happinessLevel = (happinessLevel + 10).coerceAtMost(100)
+        lobsterView.showEating()
+        showToast("龙虾吃得很开心！🦞")
+    }
+
+    /**
+     * 退出龙虾
+     */
+    fun quit() {
+        showToast("龙虾退下了，再见！👋")
+        stopSelf()
+    }
+
+    /**
+     * 饥饿计时器
+     */
+    private fun startHungerTimer() {
+        handler.postDelayed(object : Runnable {
+            override fun run() {
+                if (!isMenuOpen) {
+                    hungerLevel = (hungerLevel - 1).coerceAtLeast(0)
+                    happinessLevel = (happinessLevel - 1).coerceAtLeast(0)
+                    
+                    // 根据状态改变外观
+                    when {
+                        hungerLevel < 20 -> lobsterView.showHungry()
+                        happinessLevel < 30 -> lobsterView.showSad()
+                        else -> lobsterView.showNormal()
+                    }
+                }
+                handler.postDelayed(this, 30000) // 每30秒减少一点
+            }
+        }, 30000)
     }
 
     private fun randomMove() {
-        if (isTouching) return
+        if (isTouching || isMenuOpen) return
 
-        val deltaX = random.nextInt(150) - 75
-        val deltaY = random.nextInt(150) - 75
+        val deltaX = random.nextInt(120) - 60
+        val deltaY = random.nextInt(120) - 60
 
         val (screenWidth, screenHeight) = getScreenSize()
-        val newX = (params.x + deltaX).coerceIn(50, screenWidth - 250)
-        val newY = (params.y + deltaY).coerceIn(100, screenHeight - 300)
+        val newX = (params.x + deltaX).coerceIn(0, screenWidth - 120.dpToPx())
+        val newY = (params.y + deltaY).coerceIn(100, screenHeight - 200.dpToPx())
 
         animateMove(params.x, params.y, newX, newY)
     }
 
     private fun animateMove(startX: Int, startY: Int, endX: Int, endY: Int) {
-        // 取消之前的动画
         currentAnimation?.let { handler.removeCallbacks(it) }
         
-        val duration = 800L
+        val duration = 600L
         val startTime = System.currentTimeMillis()
 
         currentAnimation = object : Runnable {
             override fun run() {
-                if (isTouching || !::lobsterView.isInitialized) return
+                if (isTouching || isMenuOpen || !::lobsterView.isInitialized) return
                 
                 val elapsed = System.currentTimeMillis() - startTime
                 val progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
-                // 使用缓动函数
                 val eased = progress * (2 - progress)
 
                 params.x = (startX + (endX - startX) * eased).toInt()
                 params.y = (startY + (endY - startY) * eased).toInt()
 
-                try {
-                    windowManager.updateViewLayout(lobsterView, params)
-                } catch (e: Exception) {
-                    return
-                }
+                updateViewPosition()
 
                 if (progress < 1f && !isTouching) {
                     handler.postDelayed(this, 16)
@@ -199,14 +251,30 @@ class FloatingLobsterService : Service() {
         handler.post(currentAnimation!!)
     }
 
+    private fun updateViewPosition() {
+        try {
+            windowManager.updateViewLayout(lobsterView, params)
+        } catch (e: Exception) {
+            // 忽略
+        }
+    }
+
     private fun getScreenSize(): Pair<Int, Int> {
         return try {
             val metrics = DisplayMetrics()
-            windowManager.defaultDisplay.getMetrics(metrics)
+            windowManager.defaultDisplay.getRealMetrics(metrics)
             Pair(metrics.widthPixels, metrics.heightPixels)
         } catch (e: Exception) {
-            Pair(1080, 1920) // 默认值
+            Pair(1080, 1920)
         }
+    }
+
+    private fun Int.dpToPx(): Int {
+        return (this * resources.displayMetrics.density).toInt()
+    }
+
+    private fun showToast(msg: String) {
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -221,8 +289,8 @@ class FloatingLobsterService : Service() {
         )
 
         return NotificationCompat.Builder(this, LobsterApp.CHANNEL_ID)
-            .setContentTitle("龙虾宠物运行中")
-            .setContentText("点击龙虾说出指令")
+            .setContentTitle("龙虾宠物运行中 🦞")
+            .setContentText("点击龙虾进行互动")
             .setSmallIcon(R.drawable.ic_lobster)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -233,20 +301,21 @@ class FloatingLobsterService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        instance = null
         handler.removeCallbacksAndMessages(null)
         try {
-            if (::voiceRecognizer.isInitialized) {
-                voiceRecognizer.destroy()
-            }
             if (::lobsterView.isInitialized) {
                 windowManager.removeView(lobsterView)
             }
         } catch (e: Exception) {
-            // 忽略清理错误
+            // 忽略
         }
     }
 
     companion object {
         private const val NOTIFICATION_ID = 1001
+        
+        // 供 MenuActivity 调用
+        var instance: FloatingLobsterService? = null
     }
 }
