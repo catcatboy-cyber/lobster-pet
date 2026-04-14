@@ -18,6 +18,7 @@ import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.lobster.pet.LobsterApp
 import com.lobster.pet.MainActivity
+import com.lobster.pet.MenuActivity
 import com.lobster.pet.R
 import com.lobster.pet.view.LobsterView
 import kotlin.random.Random
