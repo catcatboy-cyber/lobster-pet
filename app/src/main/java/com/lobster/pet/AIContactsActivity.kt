@@ -70,7 +70,13 @@ class AIContactsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             aiChatManager.getAllContacts().collect { contacts ->
                 adapter.submitList(contacts)
-                emptyView.visibility = if (contacts.isEmpty()) View.VISIBLE else View.GONE
+                if (contacts.isEmpty()) {
+                    emptyView.visibility = View.VISIBLE
+                    recyclerView.visibility = View.GONE
+                } else {
+                    emptyView.visibility = View.GONE
+                    recyclerView.visibility = View.VISIBLE
+                }
             }
         }
     }
@@ -129,7 +135,7 @@ class AIContactsActivity : AppCompatActivity() {
             .setTitle("添加联系人")
             .setView(dialogView)
             .setPositiveButton("添加") { _, _ ->
-                val name = etName.text.toString()
+                val name = etName.text.toString().trim()
                 if (name.isBlank()) {
                     Toast.makeText(this, "请输入联系人名称", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
@@ -140,11 +146,11 @@ class AIContactsActivity : AppCompatActivity() {
                     val contact = ChatContact(
                         contactId = contactId,
                         contactName = name,
-                        systemPrompt = etPrompt.text.toString(),
+                        systemPrompt = etPrompt.text.toString().trim(),
                         isEnabled = true
                     )
                     aiChatManager.saveContact(contact)
-                    Toast.makeText(this@AIContactsActivity, "已添加", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@AIContactsActivity, "已添加: $name", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("取消", null)
