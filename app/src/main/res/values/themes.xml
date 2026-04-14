@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <theme name="Theme.LobsterPet" parent="Theme.Material3.Light.NoActionBar">
+    <style name="Theme.LobsterPet" parent="Theme.Material3.Light.NoActionBar">
         <item name="colorPrimary">@color/lobster_red</item>
         <item name="colorPrimaryDark">@color/lobster_dark</item>
         <item name="colorAccent">@color/wave_color</item>
         <item name="android:statusBarColor">@color/lobster_red</item>
-    </theme>
+    </style>
 </resources>
