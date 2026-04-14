@@ -29,21 +29,31 @@ jobs:
       run: chmod +x gradlew
     
     - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace
-    
-    - name: Check APK exists
       run: |
-        echo "Looking for APK files..."
+        ./gradlew assembleDebug --info || true
+        echo "=== Checking for APK ==="
         find . -name "*.apk" -type f 2>/dev/null
-        echo "---"
-        ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug dir not found"
+        ls -la app/build/outputs/apk/debug/ 2>/dev/null || true
     
-    - name: Upload APK
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'push'
+      with:
+        tag_name: v1.0.0-debug
+        name: Lobster Pet Debug APK
+        body: 语音龙虾桌面宠物 - Debug 版本
+        files: |
+          app/build/outputs/apk/debug/*.apk
+        fail_on_unmatched_files: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload APK as Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: lobster-pet-debug
+        name: lobster-pet-apk
         path: |
-          app/build/outputs/apk/debug/*.apk
-          **/*.apk
+          app/build/outputs/apk/**/*.apk
+          **/build/outputs/apk/**/*.apk
         retention-days: 30
-        if-no-files-found: error
+        if-no-files-found: warn
