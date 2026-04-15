@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider 路径配置 -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 应用外部存储目录 -->
+    <external-files-path
+        name="downloads"
+        path="Download" />
+    
+    <!-- 应用缓存目录 -->
+    <cache-path
+        name="cache"
+        path="." />
+    
+    <!-- 应用文件目录 -->
+    <files-path
+        name="files"
+        path="." />
+    
+    <!-- 外部存储根目录 -->
+    <external-path
+        name="external"
+        path="." />
+</paths>

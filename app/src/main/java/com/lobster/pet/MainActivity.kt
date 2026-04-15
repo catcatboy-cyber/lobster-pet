@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.lobster.pet.service.FloatingLobsterService
+import com.lobster.pet.update.UpdateActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,6 +41,10 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnAIChat).setOnClickListener {
             startActivity(Intent(this, AIContactsActivity::class.java))
+        }
+
+        findViewById<Button>(R.id.btnUpdate).setOnClickListener {
+            startActivity(Intent(this, UpdateActivity::class.java))
         }
     }
 
