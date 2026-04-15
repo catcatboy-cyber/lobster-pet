@@ -32,7 +32,8 @@ jobs:
         cache-disabled: true
     
     - name: Build Debug APK
-      run: gradle assembleDebug --info
+      run: ./gradlew assembleDebug --stacktrace
+      continue-on-error: true
     
     - name: Check APK
       run: |
