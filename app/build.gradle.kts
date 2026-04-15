@@ -46,4 +46,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     kapt(libs.androidx.room.compiler)
+    
+    // Kotlin 协程
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }
