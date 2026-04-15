@@ -24,6 +24,9 @@ import com.lobster.pet.view.LobsterView
 import com.lobster.pet.voice.VoiceRecognizer
 import com.lobster.pet.voice.CommandProcessor
 import com.lobster.pet.lifecycle.LifeSyncManager
+import com.lobster.pet.memory.MemoryManager
+import com.lobster.pet.memory.ProactiveInteractionManager
+import com.lobster.pet.view.LobsterBubbleView
 import kotlin.random.Random
 
 /**
@@ -59,6 +62,13 @@ class FloatingLobsterService : Service() {
     private var lifeSyncManager: LifeSyncManager? = null
     private var lastGreeting: String? = null
     
+    // 记忆与主动交互
+    private var memoryManager: MemoryManager? = null
+    private var proactiveManager: ProactiveInteractionManager? = null
+    
+    // 气泡View的容器
+    private var bubbleContainer: android.widget.FrameLayout? = null
+    
     private val moveRunnable = object : Runnable {
         override fun run() {
             if (isMoving && !isTouching && !isMenuOpen && !isListening) {
@@ -81,6 +91,76 @@ class FloatingLobsterService : Service() {
         startHungerTimer()
         initVoice()
         initLifeSync()
+        initMemory()
+    }
+    
+    /**
+     * 初始化记忆与主动交互
+     */
+    private fun initMemory() {
+        memoryManager = MemoryManager(this)
+        
+        // 创建气泡容器
+        bubbleContainer = android.widget.FrameLayout(this)
+        
+        proactiveManager = ProactiveInteractionManager(
+            context = this,
+            memoryManager = memoryManager!!,
+            onSpeak = { message ->
+                showBubble(message)
+            }
+        ).apply {
+            start()
+        }
+    }
+    
+    /**
+     * 显示气泡消息
+     */
+    private fun showBubble(message: String) {
+        handler.post {
+            try {
+                // 移除旧的气泡
+                bubbleContainer?.let { container ->
+                    if (container.parent == null) {
+                        val bubbleParams = WindowManager.LayoutParams(
+                            WindowManager.LayoutParams.WRAP_CONTENT,
+                            WindowManager.LayoutParams.WRAP_CONTENT,
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                            } else {
+                                WindowManager.LayoutParams.TYPE_PHONE
+                            },
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                            PixelFormat.TRANSLUCENT
+                        ).apply {
+                            gravity = Gravity.TOP or Gravity.START
+                            x = params.x
+                            y = params.y - 150
+                        }
+                        windowManager.addView(container, bubbleParams)
+                    }
+                    
+                    // 创建新气泡
+                    val bubble = LobsterBubbleView(this)
+                    container.removeAllViews()
+                    container.addView(bubble)
+                    bubble.show(message, 6000)
+                    
+                    // 6秒后移除容器
+                    handler.postDelayed({
+                        try {
+                            if (container.parent != null) {
+                                windowManager.removeView(container)
+                            }
+                        } catch (e: Exception) {}
+                    }, 6500)
+                }
+            } catch (e: Exception) {
+                Log.e("FloatingLobster", "Failed to show bubble", e)
+            }
+        }
     }
     
     /**
@@ -414,6 +494,10 @@ class FloatingLobsterService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        proactiveManager?.stop()
+        proactiveManager = null
+        memoryManager?.cleanup()
+        memoryManager = null
         lifeSyncManager?.stop()
         lifeSyncManager = null
         handler.removeCallbacksAndMessages(null)
@@ -422,6 +506,11 @@ class FloatingLobsterService : Service() {
         try {
             if (::lobsterView.isInitialized) {
                 windowManager.removeView(lobsterView)
+            }
+            bubbleContainer?.let {
+                if (it.parent != null) {
+                    windowManager.removeView(it)
+                }
             }
         } catch (e: Exception) {
             // 忽略
