@@ -25,29 +25,32 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
     
-    - name: Setup Gradle
-      uses: gradle/gradle-build-action@v2
-      with:
-        gradle-version: 8.5
-        cache-disabled: true
-    
     - name: Make gradlew executable
       run: chmod +x ./gradlew
 
     - name: Build Debug APK
       run: |
-        ./gradlew assembleDebug --stacktrace
-    
-    - name: Check APK exists
+        set -e  # 确保任何命令失败都会停止
+        ./gradlew assembleDebug --info 2>&1
+        
+    - name: Verify APK exists
       run: |
+        set -e
         echo "=== 查找所有APK文件 ==="
-        find . -name "*.apk" -type f 2>/dev/null || echo "没有找到APK"
-        echo "=== 检查build目录 ==="
-        ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "debug目录不存在"
+        find . -name "*.apk" -type f 2>/dev/null || true
+        
+        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+          echo "✅ APK文件已生成"
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+        else
+          echo "❌ APK文件未找到！"
+          ls -la app/build/outputs/apk/ 2>/dev/null || true
+          exit 1
+        fi
     
     - name: Rename APK with timestamp
       run: |
-        if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           cp app/build/outputs/apk/debug/app-debug.apk lobster-pet-${TIMESTAMP}.apk
           echo "APK已重命名为 lobster-pet-${TIMESTAMP}.apk"
@@ -68,10 +71,11 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Upload Artifact for debug
+      if: failure()  # 即使失败也上传日志
       uses: actions/upload-artifact@v4
       with:
-        name: lobster-pet-apk-${{ github.run_number }}
+        name: build-logs-${{ github.run_number }}
         path: |
-          app/build/outputs/apk/**/*.apk
-          lobster-pet-*.apk
-        retention-days: 30
+          app/build/outputs/
+          app/build/reports/
+        retention-days: 5
