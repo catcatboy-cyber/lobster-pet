@@ -23,6 +23,7 @@ import com.lobster.pet.R
 import com.lobster.pet.view.LobsterView
 import com.lobster.pet.voice.VoiceRecognizer
 import com.lobster.pet.voice.CommandProcessor
+import com.lobster.pet.lifecycle.LifeSyncManager
 import kotlin.random.Random
 
 /**
@@ -54,6 +55,10 @@ class FloatingLobsterService : Service() {
     private var commandProcessor: CommandProcessor? = null
     private var isListening = false
     
+    // 生活同步
+    private var lifeSyncManager: LifeSyncManager? = null
+    private var lastGreeting: String? = null
+    
     private val moveRunnable = object : Runnable {
         override fun run() {
             if (isMoving && !isTouching && !isMenuOpen && !isListening) {
@@ -75,6 +80,47 @@ class FloatingLobsterService : Service() {
         initFloatingWindow()
         startHungerTimer()
         initVoice()
+        initLifeSync()
+    }
+    
+    /**
+     * 初始化生活同步
+     */
+    private fun initLifeSync() {
+        lifeSyncManager = LifeSyncManager(this).apply {
+            onStateChanged = { state ->
+                // 更新龙虾外观
+                lobsterView.updateByLifeState(state)
+                
+                // 显示问候语（每天首次或状态变化时）
+                if (lastGreeting != state.greeting) {
+                    lastGreeting = state.greeting
+                    showToast(state.greeting)
+                }
+            }
+            start()
+        }
+        
+        // 启动主动提醒定时器
+        startReminderTimer()
+    }
+    
+    /**
+     * 启动提醒定时器
+     */
+    private fun startReminderTimer() {
+        handler.postDelayed(object : Runnable {
+            override fun run() {
+                lifeSyncManager?.let { manager ->
+                    when {
+                        manager.shouldRemindWater() -> showToast("该喝水啦~ 🥤")
+                        manager.shouldRemindSleep() -> showToast("很晚了，该睡觉了 🌙")
+                        manager.shouldRemindBreak() -> showToast("工作很久了，休息一下吧 ☕")
+                    }
+                }
+                handler.postDelayed(this, 60000) // 每分钟检查
+            }
+        }, 60000)
     }
 
     /**
@@ -368,6 +414,8 @@ class FloatingLobsterService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        lifeSyncManager?.stop()
+        lifeSyncManager = null
         handler.removeCallbacksAndMessages(null)
         voiceRecognizer?.destroy()
         voiceRecognizer = null
