@@ -31,9 +31,11 @@ jobs:
         gradle-version: 8.5
         cache-disabled: true
     
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+
     - name: Build Debug APK
       run: ./gradlew assembleDebug --stacktrace
-      continue-on-error: true
     
     - name: Check APK
       run: |
