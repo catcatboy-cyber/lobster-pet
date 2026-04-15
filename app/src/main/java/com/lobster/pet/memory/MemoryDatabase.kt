@@ -9,6 +9,7 @@ import java.util.*
  * 记忆数据库 - 存储用户相关信息
  */
 @Database(entities = [UserMemory::class, UserPreference::class, ChatHistory::class, ImportantDate::class], version = 1)
+@TypeConverters(Converters::class)
 abstract class MemoryDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
 
@@ -26,6 +27,23 @@ abstract class MemoryDatabase : RoomDatabase() {
             }
         }
     }
+}
+
+/**
+ * 类型转换器
+ */
+class Converters {
+    @TypeConverter
+    fun fromMemoryType(type: MemoryType): String = type.name
+
+    @TypeConverter
+    fun toMemoryType(value: String): MemoryType = MemoryType.valueOf(value)
+
+    @TypeConverter
+    fun fromDateType(type: DateType): String = type.name
+
+    @TypeConverter
+    fun toDateType(value: String): DateType = DateType.valueOf(value)
 }
 
 /**
