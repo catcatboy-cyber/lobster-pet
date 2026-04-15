@@ -148,7 +148,13 @@ class AIContactsActivity : AppCompatActivity() {
 
         Toast.makeText(this, "正在打开微信找 ${contact.contactName}...", Toast.LENGTH_SHORT).show()
 
-        // 启动微信并搜索联系人
+        // 检查微信是否安装
+        if (!isWeChatInstalled()) {
+            Toast.makeText(this, "未安装微信", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // 启动微信
         val intent = packageManager.getLaunchIntentForPackage("com.tencent.mm")
         if (intent != null) {
             startActivity(intent)
@@ -158,7 +164,20 @@ class AIContactsActivity : AppCompatActivity() {
                 LobsterAccessibilityService.startTestChat(contact.contactName, "你好吗？")
             }
         } else {
-            Toast.makeText(this, "未安装微信", Toast.LENGTH_SHORT).show()
+            // 尝试直接启动微信（某些ROM可能需要特殊处理）
+            try {
+                val launchIntent = Intent().apply {
+                    setClassName("com.tencent.mm", "com.tencent.mm.ui.LauncherUI")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(launchIntent)
+                lifecycleScope.launch {
+                    kotlinx.coroutines.delay(2000)
+                    LobsterAccessibilityService.startTestChat(contact.contactName, "你好吗？")
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this, "无法启动微信，请手动打开", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -205,6 +224,18 @@ class AIContactsActivity : AppCompatActivity() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         startActivity(intent)
         Toast.makeText(this, "请开启「语音龙虾」辅助功能", Toast.LENGTH_LONG).show()
+    }
+    
+    /**
+     * 检查微信是否安装
+     */
+    private fun isWeChatInstalled(): Boolean {
+        return try {
+            packageManager.getPackageInfo("com.tencent.mm", 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
     
     private fun showAddContactDialog() {
